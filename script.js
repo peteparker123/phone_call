@@ -1,12 +1,16 @@
 // Configuration for different environments
 const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const peerConfig = {
-  host: isLocalhost ? location.hostname : 'https://phone-call-01ph.onrender.com/', // Replace with your actual Render URL
+  host: isLocalhost ? location.hostname : 'phone-call-01ph.onrender.com', // Fixed: Remove https:// and trailing slash
   port: isLocalhost ? (location.port || 8000) : 443,
   secure: !isLocalhost,
-  debug: 1,
+  debug: 2, // Increased debug level
   path: "/myapp",
 };
+
+console.log('PeerJS Configuration:', peerConfig);
+console.log('Is localhost?', isLocalhost);
+console.log('Current location:', location);
 
 const peer = new Peer(
   `${Math.floor(Math.random() * 2 ** 18)
@@ -14,7 +18,91 @@ const peer = new Peer(
     .padStart(4, 0)}`,
   peerConfig,
 );
+
+console.log('Peer created with config:', peerConfig);
 window.peer = peer;
+
+// Enhanced error handling and connection status
+peer.on('open', (id) => {
+  console.log('Peer connection opened with ID:', id);
+  document.getElementById("cast-status").textContent = `Your device ID is: ${id}`;
+});
+
+peer.on('connection', (conn) => {
+  console.log('Data connection established:', conn);
+});
+
+peer.on('call', (call) => {
+  console.log('Incoming call from:', call.peer);
+});
+
+peer.on('error', (err) => {
+  console.error('PeerJS error details:', err);
+  console.error('Error type:', err.type);
+  console.error('Error message:', err.message);
+  
+  let errorMessage = 'Connection Error: ';
+  switch(err.type) {
+    case 'browser-incompatible':
+      errorMessage += 'Browser not supported';
+      break;
+    case 'disconnected':
+      errorMessage += 'Lost connection to server';
+      break;
+    case 'invalid-id':
+      errorMessage += 'Invalid peer ID';
+      break;
+    case 'invalid-key':
+      errorMessage += 'Invalid API key';
+      break;
+    case 'network':
+      errorMessage += 'Network error';
+      break;
+    case 'peer-unavailable':
+      errorMessage += 'Peer is unavailable';
+      break;
+    case 'ssl-unavailable':
+      errorMessage += 'SSL connection unavailable';
+      break;
+    case 'server-error':
+      errorMessage += 'Server error';
+      break;
+    case 'socket-error':
+      errorMessage += 'Socket connection error';
+      break;
+    case 'socket-closed':
+      errorMessage += 'Socket connection closed';
+      break;
+    case 'unavailable-id':
+      errorMessage += 'ID already taken';
+      break;
+    case 'webrtc':
+      errorMessage += 'WebRTC error';
+      break;
+    default:
+      errorMessage += err.message || 'Unknown error';
+  }
+  
+  document.getElementById("cast-status").textContent = errorMessage;
+  
+  // Attempt to reconnect for certain error types
+  if (err.type === 'disconnected' || err.type === 'network' || err.type === 'socket-error') {
+    console.log('Attempting to reconnect in 3 seconds...');
+    setTimeout(() => {
+      peer.reconnect();
+    }, 3000);
+  }
+});
+
+peer.on('disconnected', () => {
+  console.log('Peer disconnected');
+  document.getElementById("cast-status").textContent = 'Disconnected - Attempting to reconnect...';
+});
+
+peer.on('close', () => {
+  console.log('Peer connection closed');
+  document.getElementById("cast-status").textContent = 'Connection closed';
+});
 function getLocalStream() {
   navigator.mediaDevices
     .getUserMedia({ video: false, audio: true })
@@ -37,11 +125,6 @@ const connectBtn = document.querySelector('.connect-btn');
 const remoteIdInput = document.querySelector('.modal input');
 const callContainer = document.querySelector('.call-container');
 const closeModal = document.querySelector('#close');
-
-peer.on("open", () => {
-  document.getElementById("cast-status").textContent =
-    `Your device ID is: ${peer.id}`;
-});
 
 // Show modal when call button is clicked
 callBtn.addEventListener('click', () => {
@@ -69,16 +152,18 @@ hangupBtn.addEventListener('click', () => {
 
 // Connect to a peer
 function connectToPeer(remoteId) {
+  console.log('Attempting to call peer:', remoteId);
   const call = peer.call(remoteId, window.localStream);
+  
+  addCallErrorHandling(call);
+  
   call.on('stream', (remoteStream) => {
+    console.log('Received remote stream');
     window.remoteAudio.srcObject = remoteStream;
     window.remoteAudio.autoplay = true;
     callContainer.hidden = false;
     callBtn.hidden = true;
-  });
-  
-  call.on('close', () => {
-    hangUp();
+    document.getElementById("cast-status").textContent = `Connected to: ${remoteId}`;
   });
   
   window.currentCall = call;
@@ -86,16 +171,18 @@ function connectToPeer(remoteId) {
 
 // Answer incoming calls
 peer.on('call', (call) => {
+  console.log('Answering call from:', call.peer);
   call.answer(window.localStream);
+  
+  addCallErrorHandling(call);
+  
   call.on('stream', (remoteStream) => {
+    console.log('Received remote stream from incoming call');
     window.remoteAudio.srcObject = remoteStream;
     window.remoteAudio.autoplay = true;
     callContainer.hidden = false;
     callBtn.hidden = true;
-  });
-  
-  call.on('close', () => {
-    hangUp();
+    document.getElementById("cast-status").textContent = `Call from: ${call.peer}`;
   });
   
   window.currentCall = call;
@@ -115,8 +202,15 @@ function hangUp() {
   window.currentCall = null;
 }
 
-// Handle peer connection errors
-peer.on('error', (err) => {
-  console.error('PeerJS error:', err);
-  document.getElementById("cast-status").textContent = `Error: ${err.message}`;
-});
+// Additional call error handling
+function addCallErrorHandling(call) {
+  call.on('error', (err) => {
+    console.error('Call error:', err);
+    document.getElementById("cast-status").textContent = `Call error: ${err.message}`;
+  });
+  
+  call.on('close', () => {
+    console.log('Call ended');
+    hangUp();
+  });
+}
