@@ -1,7 +1,7 @@
 // Configuration for different environments
 const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const peerConfig = {
-  host: isLocalhost ? location.hostname : 'your-actual-app-name.onrender.com', // Replace with your actual Render URL
+  host: isLocalhost ? location.hostname : 'https://phone-call-01ph.onrender.com/', // Replace with your actual Render URL
   port: isLocalhost ? (location.port || 8000) : 443,
   secure: !isLocalhost,
   debug: 1,
